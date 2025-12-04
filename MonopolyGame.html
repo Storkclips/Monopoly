@@ -961,203 +961,208 @@
 </style>
 </head>
 <body>
-<button id="gmToggleButton" class="gm-toggle-btn">GM</button>
-<div class="root">
-    <div class="side-panel" id="playersPanel">
-        <div class="panel-title">Players</div>
-        <div class="players-list" id="playersList"></div>
+    <button id="gmToggleButton" class="gm-toggle-btn">GM</button>
 
-        <div class="panel-title" style="margin-top:8px;">Monopolies & Builds</div>
-        <div class="log-panel" style="
-            max-height: 130px;
-            min-height: 90px;
-            overflow-y: auto;
-            border-radius: 12px;
-            background: rgba(0,0,0,0.45);
-            padding: 8px 10px;
-        ">
-            <div id="buildSummary" style="font-size:0.74rem; line-height:1.2;"></div>
-        </div>
-    </div>
+    <!-- ===== Main Layout ===== -->
+    <div class="root">
+        <!-- Chunk: Players Panel -->
+        <section class="side-panel" id="playersPanel">
+            <div class="panel-title">Players</div>
+            <div class="players-list" id="playersList"></div>
 
-    <div class="board-wrapper" id="boardWrapper">
-        <!-- House/Hotel Pool HUD -->
-        <div id="housePoolHud" class="pool-hud">
-            <div>
-                <span class="label">Houses</span>
-                <span class="value" id="poolHousesValue">32</span>
+            <div class="panel-title" style="margin-top:8px;">Monopolies & Builds</div>
+            <div class="log-panel" style="
+                max-height: 130px;
+                min-height: 90px;
+                overflow-y: auto;
+                border-radius: 12px;
+                background: rgba(0,0,0,0.45);
+                padding: 8px 10px;
+            ">
+                <div id="buildSummary" style="font-size:0.74rem; line-height:1.2;"></div>
             </div>
-            <div>
-                <span class="label">Hotels</span>
-                <span class="value" id="poolHotelsValue">12</span>
-            </div>
-        </div>
+        </section>
 
-        <!-- Auction overlay -->
-        <div class="auction-overlay" id="auctionOverlay">
-            <div class="auction-card">
-                <div class="auction-color-band" id="auctionColorBand"></div>
-                <div class="auction-title">Auction</div>
-                <div class="auction-property-name" id="auctionPropertyName">Property Name</div>
-
-                <div class="auction-row">
-                    <span class="label">Starting</span>
-                    <span class="value" id="auctionStartingBid">$10</span>
+        <!-- Chunk: Board & Overlays -->
+        <section class="board-wrapper" id="boardWrapper">
+            <!-- Pool HUD -->
+            <div id="housePoolHud" class="pool-hud">
+                <div>
+                    <span class="label">Houses</span>
+                    <span class="value" id="poolHousesValue">32</span>
                 </div>
-                <div class="auction-row">
-                    <span class="label">Current Bid</span>
-                    <span class="value" id="auctionCurrentBid">$10</span>
-                </div>
-                <div class="auction-row">
-                    <span class="label">Leader</span>
-                    <span class="value" id="auctionCurrentLeader">None</span>
-                </div>
-                <div class="auction-row">
-                    <span class="label">Bidding Now</span>
-                    <span class="value" id="auctionCurrentPlayer">—</span>
-                </div>
-
-                <div class="auction-note" id="auctionNote">
-                    Players bid in turn until only one bidder remains.
+                <div>
+                    <span class="label">Hotels</span>
+                    <span class="value" id="poolHotelsValue">12</span>
                 </div>
             </div>
-        </div>
 
-        <!-- Rent Payment Overlay -->
-        <div class="rent-overlay overlay" id="rentOverlay">
-            <div class="overlay-card" id="rentCard">
-                <h2 id="rentTitle"></h2>
-                <p id="rentAmount"></p>
-                <p id="rentProperty"></p>
-            </div>
-        </div>
+            <!-- Overlay: Auction -->
+            <div class="auction-overlay" id="auctionOverlay">
+                <div class="auction-card">
+                    <div class="auction-color-band" id="auctionColorBand"></div>
+                    <div class="auction-title">Auction</div>
+                    <div class="auction-property-name" id="auctionPropertyName">Property Name</div>
 
-        <!-- Set Status Overlay (Railroads / Utilities) -->
-        <div class="set-overlay overlay" id="setOverlay">
-            <div class="overlay-card" id="setCard">
-                <h2 id="setTitle"></h2>
-                <p id="setInfo"></p>
-            </div>
-        </div>
-
-        <!-- Trade overlay -->
-        <div class="trade-overlay" id="tradeOverlay">
-            <div class="trade-card" id="tradeCard">
-                <div class="trade-title">Trade Proposal</div>
-                <div class="trade-players">
-                    <span class="name" id="tradePlayerAName">Player A</span>
-                    &nbsp;↔&nbsp;
-                    <span class="name" id="tradePlayerBName">Player B</span>
-                </div>
-                <div class="trade-grid">
-                    <div class="trade-column">
-                        <div class="trade-column-header" id="tradeAHeader">From A</div>
-                        <div class="trade-list" id="tradeAList"></div>
-                        <div class="trade-cash" id="tradeACash"></div>
+                    <div class="auction-row">
+                        <span class="label">Starting</span>
+                        <span class="value" id="auctionStartingBid">$10</span>
                     </div>
-                    <div class="trade-column">
-                        <div class="trade-column-header" id="tradeBHeader">From B</div>
-                        <div class="trade-list" id="tradeBList"></div>
-                        <div class="trade-cash" id="tradeBCash"></div>
+                    <div class="auction-row">
+                        <span class="label">Current Bid</span>
+                        <span class="value" id="auctionCurrentBid">$10</span>
                     </div>
-                </div>
-                <div class="trade-footer">
-                    <div id="tradeDecisionText">Evaluating offer…</div>
-                    <div class="trade-decision">
-                        <span class="trade-tag" id="tradeDecisionTag">PENDING</span>
+                    <div class="auction-row">
+                        <span class="label">Leader</span>
+                        <span class="value" id="auctionCurrentLeader">None</span>
+                    </div>
+                    <div class="auction-row">
+                        <span class="label">Bidding Now</span>
+                        <span class="value" id="auctionCurrentPlayer">—</span>
+                    </div>
+
+                    <div class="auction-note" id="auctionNote">
+                        Players bid in turn until only one bidder remains.
                     </div>
                 </div>
             </div>
-            <div class="trade-stamp" id="tradeStamp">ACCEPTED</div>
-            <div class="trade-stamp" id="tradeStampDecline" style="color: rgba(198, 40, 40, 0.85);">DECLINED</div>
-        </div>
 
-        <!-- Chance / Community card overlay -->
-        <div class="card-overlay" id="cardOverlay">
-            <div class="card-wrapper">
-                <div class="card-monopoly" id="cardMonopoly">
-                    <div class="card-band" id="cardBand"></div>
-                    <div class="card-header" id="cardHeader">CHANCE</div>
-                    <div class="card-text" id="cardText">Advance to GO (Collect $200).</div>
-                    <div class="card-footer-note">The card takes effect immediately.</div>
+            <!-- Overlay: Rent Payment -->
+            <div class="rent-overlay overlay" id="rentOverlay">
+                <div class="overlay-card" id="rentCard">
+                    <h2 id="rentTitle"></h2>
+                    <p id="rentAmount"></p>
+                    <p id="rentProperty"></p>
                 </div>
             </div>
-        </div>
 
-        <!-- GM MODE: grid + markers -->
-        <div id="gmGridOverlay" class="gm-grid-layer"></div>
-        <div id="gmMarkersLayer" class="gm-markers-layer"></div>
+            <!-- Overlay: Set Status (Railroads / Utilities) -->
+            <div class="set-overlay overlay" id="setOverlay">
+                <div class="overlay-card" id="setCard">
+                    <h2 id="setTitle"></h2>
+                    <p id="setInfo"></p>
+                </div>
+            </div>
+
+            <!-- Overlay: Trade -->
+            <div class="trade-overlay" id="tradeOverlay">
+                <div class="trade-card" id="tradeCard">
+                    <div class="trade-title">Trade Proposal</div>
+                    <div class="trade-players">
+                        <span class="name" id="tradePlayerAName">Player A</span>
+                        &nbsp;↔&nbsp;
+                        <span class="name" id="tradePlayerBName">Player B</span>
+                    </div>
+                    <div class="trade-grid">
+                        <div class="trade-column">
+                            <div class="trade-column-header" id="tradeAHeader">From A</div>
+                            <div class="trade-list" id="tradeAList"></div>
+                            <div class="trade-cash" id="tradeACash"></div>
+                        </div>
+                        <div class="trade-column">
+                            <div class="trade-column-header" id="tradeBHeader">From B</div>
+                            <div class="trade-list" id="tradeBList"></div>
+                            <div class="trade-cash" id="tradeBCash"></div>
+                        </div>
+                    </div>
+                    <div class="trade-footer">
+                        <div id="tradeDecisionText">Evaluating offer…</div>
+                        <div class="trade-decision">
+                            <span class="trade-tag" id="tradeDecisionTag">PENDING</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="trade-stamp" id="tradeStamp">ACCEPTED</div>
+                <div class="trade-stamp" id="tradeStampDecline" style="color: rgba(198, 40, 40, 0.85);">DECLINED</div>
+            </div>
+
+            <!-- Overlay: Chance / Community Card -->
+            <div class="card-overlay" id="cardOverlay">
+                <div class="card-wrapper">
+                    <div class="card-monopoly" id="cardMonopoly">
+                        <div class="card-band" id="cardBand"></div>
+                        <div class="card-header" id="cardHeader">CHANCE</div>
+                        <div class="card-text" id="cardText">Advance to GO (Collect $200).</div>
+                        <div class="card-footer-note">The card takes effect immediately.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GM MODE: grid + markers -->
+            <div id="gmGridOverlay" class="gm-grid-layer"></div>
+            <div id="gmMarkersLayer" class="gm-markers-layer"></div>
+        </section>
+
+        <!-- Chunk: Cards & Properties Panel -->
+        <section class="side-panel" id="cardsPanel">
+            <div class="panel-title">Cards & Properties</div>
+            <div id="cardGridContainer" class="card-panel"></div>
+        </section>
+
+        <!-- Chunk: Event Log Panel -->
+        <section class="side-panel" id="logPanel">
+            <div class="panel-title">Event Log</div>
+            <div class="log-panel">
+                <div class="log-scroll" id="logScroll"></div>
+                <div class="dice-display" id="diceDisplay">Preparing the first roll…</div>
+            </div>
+        </section>
     </div>
 
-    <!-- NEW Cards & Properties Panel -->
-    <div class="side-panel" id="cardsPanel">
-        <div class="panel-title">Cards & Properties</div>
-        <div id="cardGridContainer" class="card-panel"></div>
-    </div>
-
-    <div class="side-panel" id="logPanel">
-        <div class="panel-title">Event Log</div>
-        <div class="log-panel">
-            <div class="log-scroll" id="logScroll"></div>
-            <div class="dice-display" id="diceDisplay">Preparing the first roll…</div>
+    <!-- ===== GM MODE: control panel ===== -->
+    <section id="gmPanel" class="gm-panel">
+        <div class="gm-header" id="gmPanelHeader">
+            GM MODE
+            <span id="gmPanelClose">×</span>
         </div>
-    </div>
-</div>
-
-<!-- GM MODE: control panel -->
-<div id="gmPanel" class="gm-panel">
-    <div class="gm-header" id="gmPanelHeader">
-        GM MODE
-        <span id="gmPanelClose">×</span>
-    </div>
-    <div class="gm-body">
-        <div class="gm-row">
-            <label>Game Speed:</label>
-            <input type="range" id="gmGameSpeed" min="0.1" max="50" step="0.1" value="1" />
+        <div class="gm-body">
+            <div class="gm-row">
+                <label>Game Speed:</label>
+                <input type="range" id="gmGameSpeed" min="0.1" max="50" step="0.1" value="1" />
+            </div>
+            <div class="gm-row">
+                <button id="gmToggleGrid">Grid</button>
+                <button id="gmToggleLabels">Tile #</button>
+            </div>
+            <div class="gm-row">
+                <label>Mode:</label>
+                <select id="gmModeSelect">
+                    <option value="none">None</option>
+                    <option value="center">Tile Center</option>
+                    <option value="house">House Pos</option>
+                    <option value="hotel">Hotel Pos</option>
+                    <option value="owner">Owner Pos</option>
+                    <option value="state">Edit State</option>
+                </select>
+            </div>
+            <div class="gm-row">
+                <span>Tile: <span id="gmCurrentTileLabel">—</span></span>
+            </div>
+            <div class="gm-row gm-state-controls">
+                <label>Owner:</label>
+                <select id="gmOwnerSelect">
+                    <option value="">Bank</option>
+                    <option value="0">Player 1</option>
+                    <option value="1">Player 2</option>
+                    <option value="2">Player 3</option>
+                    <option value="3">Player 4</option>
+                </select>
+            </div>
+            <div class="gm-row gm-state-controls">
+                <label>Houses:</label>
+                <input type="number" id="gmHouseCount" min="0" max="4" />
+                <label><input type="checkbox" id="gmHotelToggle" /> Hotel</label>
+            </div>
+            <div class="gm-row">
+                <button id="gmSave">Save</button>
+                <button id="gmLoad">Load</button>
+            </div>
+            <div class="gm-row">
+                <button id="gmExport">Export JSON</button>
+            </div>
+            <textarea id="gmExportText" class="gm-export" readonly></textarea>
         </div>
-        <div class="gm-row">
-            <button id="gmToggleGrid">Grid</button>
-            <button id="gmToggleLabels">Tile #</button>
-        </div>
-        <div class="gm-row">
-            <label>Mode:</label>
-            <select id="gmModeSelect">
-                <option value="none">None</option>
-                <option value="center">Tile Center</option>
-                <option value="house">House Pos</option>
-                <option value="hotel">Hotel Pos</option>
-                <option value="owner">Owner Pos</option>
-                <option value="state">Edit State</option>
-            </select>
-        </div>
-        <div class="gm-row">
-            <span>Tile: <span id="gmCurrentTileLabel">—</span></span>
-        </div>
-        <div class="gm-row gm-state-controls">
-            <label>Owner:</label>
-            <select id="gmOwnerSelect">
-                <option value="">Bank</option>
-                <option value="0">Player 1</option>
-                <option value="1">Player 2</option>
-                <option value="2">Player 3</option>
-                <option value="3">Player 4</option>
-            </select>
-        </div>
-        <div class="gm-row gm-state-controls">
-            <label>Houses:</label>
-            <input type="number" id="gmHouseCount" min="0" max="4" />
-            <label><input type="checkbox" id="gmHotelToggle" /> Hotel</label>
-        </div>
-        <div class="gm-row">
-            <button id="gmSave">Save</button>
-            <button id="gmLoad">Load</button>
-        </div>
-        <div class="gm-row">
-            <button id="gmExport">Export JSON</button>
-        </div>
-        <textarea id="gmExportText" class="gm-export" readonly></textarea>
-    </div>
-</div>
+    </section>
 
 <script>
 async function handleBankruptcy(player, owedToPlayerId) {
