@@ -1154,6 +1154,16 @@
                 <label><input type="checkbox" id="gmHotelToggle" /> Hotel</label>
             </div>
             <div class="gm-row">
+                <label>Options:</label>
+                <button id="gmEndGameBtn">End Game</button>
+            </div>
+            <div class="gm-row">
+                <label>Set Money:</label>
+                <select id="gmMoneyPlayer"></select>
+                <input type="number" id="gmMoneyAmount" min="0" step="50" style="width:100px;" />
+                <button id="gmSetMoneyBtn">Apply</button>
+            </div>
+            <div class="gm-row">
                 <button id="gmSave">Save</button>
                 <button id="gmLoad">Load</button>
             </div>
@@ -1503,6 +1513,10 @@ const gmCurrentTileLabelEl = document.getElementById("gmCurrentTileLabel");
 const gmOwnerSelectEl = document.getElementById("gmOwnerSelect");
 const gmHouseCountEl = document.getElementById("gmHouseCount");
 const gmHotelToggleEl = document.getElementById("gmHotelToggle");
+const gmEndGameBtn = document.getElementById("gmEndGameBtn");
+const gmMoneyPlayerEl = document.getElementById("gmMoneyPlayer");
+const gmMoneyAmountEl = document.getElementById("gmMoneyAmount");
+const gmSetMoneyBtn = document.getElementById("gmSetMoneyBtn");
 const gmSaveBtn = document.getElementById("gmSave");
 const gmLoadBtn = document.getElementById("gmLoad");
 const gmExportBtn = document.getElementById("gmExport");
@@ -1517,6 +1531,7 @@ let gmMode = "none";
 let gmCurrentTile = null;
 let gamePaused = false;
 let gameSpeed = 1; // Default speed multiplier
+let forceEndGame = false;
 
 // tileCalib[tileIndex] = { center:{}, house:{}, hotel:{}, owner:{} }
 let tileCalib = {};
@@ -1677,6 +1692,16 @@ function applyGMStateToTile() {
     renderPlayers();
 }
 
+function populateGMMoneyPlayerOptions() {
+    gmMoneyPlayerEl.innerHTML = "";
+    players.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.name;
+        gmMoneyPlayerEl.appendChild(opt);
+    });
+}
+
 /* ========== UTILS ========== */
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -1707,6 +1732,23 @@ function ownsFullSet(playerId, color) {
     const group = colorGroups[color] || [];
     if (!group.length) return false;
     return group.every(idx => ownership[idx] === playerId);
+}
+
+function colorGroupHasBuildings(tileIndex) {
+    const tile = board[tileIndex];
+    if (!tile || tile.type !== "property" || tile.color == null) return false;
+
+    const group = colorGroups[tile.color] || [];
+    return group.some(idx => {
+        const dev = developments[idx];
+        return dev && (dev.houses > 0 || dev.hotel);
+    });
+}
+
+function getLeadingPlayer() {
+    const alive = players.filter(p => !p.bankrupt);
+    if (!alive.length) return null;
+    return alive.slice().sort((a, b) => b.money - a.money)[0];
 }
 
 /* House/Hotel pool HUD update */
@@ -2800,6 +2842,7 @@ async function attemptLiquidation(player, amountOwed) {
             const t = board[idx];
             const dev = developments[idx];
             if (dev && (dev.houses > 0 || dev.hotel)) return false;
+            if (colorGroupHasBuildings(idx)) return false;
             if (t.mortgaged) return false;
             return true;
         });
@@ -3298,6 +3341,12 @@ async function mainLoop() {
     log("The game begins.");
 
     while (true) {
+        if (forceEndGame) {
+            const winner = getLeadingPlayer();
+            showEndGamePopup(winner);
+            return;
+        }
+
         const alive = players.filter(p => !p.bankrupt);
         if (alive.length <= 1) {
             const winner = alive[0] || null;
@@ -3305,9 +3354,11 @@ async function mainLoop() {
             return;
         }
 
-        while (gamePaused) {
+        while (gamePaused && !forceEndGame) {
             await sleep(200);
         }
+
+        if (forceEndGame) continue;
 
         const player = players[currentPlayerIndex];
         await takeTurn(player);
@@ -3320,6 +3371,7 @@ async function mainLoop() {
 loadTileCalib();
 renderGMGrid();
 renderGMMarkers();
+populateGMMoneyPlayerOptions();
 
 function setGMActive(active) {
     gmActive = active;
@@ -3378,6 +3430,22 @@ gmLoadBtn.addEventListener("click", () => {
 
 gmExportBtn.addEventListener("click", () => {
     gmExportTextEl.value = JSON.stringify(tileCalib, null, 2);
+});
+
+gmEndGameBtn.addEventListener("click", () => {
+    forceEndGame = true;
+    setGMActive(false);
+    log("GM: End game requested.", { boring: true });
+});
+
+gmSetMoneyBtn.addEventListener("click", () => {
+    const playerId = Number(gmMoneyPlayerEl.value);
+    const amount = Number(gmMoneyAmountEl.value);
+    if (Number.isNaN(playerId) || Number.isNaN(amount)) return;
+
+    players[playerId].money = Math.max(0, Math.floor(amount));
+    log(`GM: Set ${players[playerId].name}'s money to $${players[playerId].money}.`, { boring: true });
+    renderPlayers();
 });
 
 gmOwnerSelectEl.addEventListener("change", applyGMStateToTile);
@@ -3468,6 +3536,7 @@ boardWrapper.addEventListener("click", (e) => {
 mainLoop();
 
 function restartGame() {
+    forceEndGame = false;
     players.forEach(p => {
         p.money = 1500;
         p.pos = 0;
@@ -3502,6 +3571,7 @@ function restartGame() {
         playerCards[i].jailFreeChest = 0;
     }
 
+    populateGMMoneyPlayerOptions();
     refreshAllDevMarkers();
     updateAllTokenPositions(true);
     renderPlayers();
