@@ -1734,15 +1734,32 @@ function ownsFullSet(playerId, color) {
     return group.every(idx => ownership[idx] === playerId);
 }
 
-function colorGroupHasBuildings(tileIndex) {
+function colorGroupHasBuildings(tileIndex, ownerId = null) {
     const tile = board[tileIndex];
     if (!tile || tile.type !== "property" || tile.color == null) return false;
 
     const group = colorGroups[tile.color] || [];
     return group.some(idx => {
         const dev = developments[idx];
-        return dev && (dev.houses > 0 || dev.hotel);
+        if (!dev) return false;
+
+        if (ownerId != null && ownership[idx] !== ownerId) return false;
+
+        return dev.houses > 0 || dev.hotel;
     });
+}
+
+function canMortgageProperty(idx, ownerId) {
+    const tile = board[idx];
+    if (!tile || tile.mortgaged) return false;
+
+    if (tile.type === "property") {
+        const dev = developments[idx];
+        if (dev && (dev.houses > 0 || dev.hotel)) return false;
+        if (colorGroupHasBuildings(idx, ownerId)) return false;
+    }
+
+    return true;
 }
 
 function getLeadingPlayer() {
@@ -2838,14 +2855,7 @@ function maybeUnmortgageProperty(player) {
 
 async function attemptLiquidation(player, amountOwed) {
     const getUnmortgaged = () =>
-        player.properties.filter(idx => {
-            const t = board[idx];
-            const dev = developments[idx];
-            if (dev && (dev.houses > 0 || dev.hotel)) return false;
-            if (colorGroupHasBuildings(idx)) return false;
-            if (t.mortgaged) return false;
-            return true;
-        });
+        player.properties.filter(idx => canMortgageProperty(idx, player.id));
 
     const getSellable = () =>
         player.properties.filter(idx => {
@@ -3237,10 +3247,13 @@ async function takeTurn(player) {
     let continueTurn = true;
 
     while (continueTurn) {
+        if (forceEndGame) return;
         renderPlayers();
         await sleep(400 + Math.random() * 400);
 
         await maybeAttemptTrade(player);
+
+        if (forceEndGame) return;
 
         /* ===== JAIL HANDLING ===== */
         if (player.inJail) {
