@@ -1855,23 +1855,20 @@ function tokenBasePosition(index, inJail = false) {
     const center = tileCenter(index);
     const calib = tileCalib[index];
 
+    // Exact calibration for Jail / Just Visiting
+    if (index === 10) {
+        if (inJail) {
+            return { x: size * 0.0787, y: size * 0.9075 };
+        }
+        return { x: size * 0.0212, y: size * 0.9762 };
+    }
+
     // Match the general placement used for houses/hotels when available
     if (calib?.house) {
         return { x: calib.house.x * size, y: calib.house.y * size };
     }
     if (calib?.hotel) {
         return { x: calib.hotel.x * size, y: calib.hotel.y * size };
-    }
-
-    // Special handling for Jail / Just Visiting
-    if (index === 10) {
-        const tileSize = size / 11;
-        if (inJail) {
-            return {
-                x: center.x - tileSize * 0.25,
-                y: center.y - tileSize * 0.25
-            };
-        }
     }
 
     const boardCenter = { x: size / 2, y: size / 2 };
