@@ -44,6 +44,9 @@
         color: #222;
         font-family: "Georgia", "Times New Roman", serif;
         border-color: #111;
+        width: min(92vw, calc(var(--board-size) + 140px));
+        max-width: 760px;
+        min-width: min(360px, 92vw);
     }
 
     #endGamePopup h2 {
@@ -64,6 +67,8 @@
     #wealthChartWrap canvas {
         width: 100%;
         height: 230px;
+        max-height: calc(var(--board-size) * 0.35);
+        min-height: 180px;
         border-radius: 10px;
         background: linear-gradient(180deg, #fff, #f5edd6);
     }
@@ -1424,6 +1429,28 @@ players.forEach(p => {
 let wealthHistory = players.map(() => []);
 let turnCounter = 0;
 
+function sizeEndGamePopupLayout() {
+    const card = document.querySelector("#endGamePopup .overlay-card");
+    const chartCanvas = document.getElementById("endGameChart");
+    const chartWrap = document.getElementById("wealthChartWrap");
+
+    if (card) {
+        const rootStyles = getComputedStyle(document.documentElement);
+        const boardSizePx = parseFloat(rootStyles.getPropertyValue("--board-size")) || 720;
+        const responsiveMax = Math.min(window.innerWidth - 24, boardSizePx + 140);
+        card.style.maxWidth = `${Math.min(760, Math.max(360, responsiveMax))}px`;
+    }
+
+    if (chartCanvas && chartWrap) {
+        const boardSizePx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--board-size")) || 720;
+        const targetHeight = Math.min(Math.max(180, boardSizePx * 0.32), chartCanvas.scrollHeight || 320);
+        const wrapWidth = chartWrap.clientWidth || chartCanvas.width;
+        chartCanvas.style.height = `${targetHeight}px`;
+        chartCanvas.width = wrapWidth;
+        chartCanvas.height = targetHeight;
+    }
+}
+
 /* Simulated card inventory per player */
 const playerCards = players.map(() => ({
     chance: 0,
@@ -1466,6 +1493,8 @@ function showEndGamePopup(winner) {
     statsDiv.innerHTML = html;
     popup.style.display = "flex";
 
+    sizeEndGamePopupLayout();
+    
     renderWealthChart();
 
     // Countdown & Auto-Restart
@@ -1544,6 +1573,7 @@ function recordWealthSnapshot(label = "") {
 }
 
 function renderWealthChart() {
+    sizeEndGamePopupLayout();
     const canvas = document.getElementById("endGameChart");
     const legend = document.getElementById("wealthLegend");
     if (!canvas || !legend) return;
@@ -1661,6 +1691,14 @@ function renderWealthChart() {
 
     requestAnimationFrame(drawFrame);
 }
+
+window.addEventListener("resize", () => {
+    const popup = document.getElementById("endGamePopup");
+    if (popup && popup.style.display !== "none") {
+        sizeEndGamePopupLayout();
+        renderWealthChart();
+    }
+});
 
 // Monopoly color bands
 const colorBandMap = {
@@ -4450,7 +4488,7 @@ function restartGame() {
 
 <!-- End Game Stats Popup -->
 <div id="endGamePopup" class="overlay" style="z-index:3000; display:none;">
-    <div class="overlay-card" style="max-width:560px; text-align:left;">
+    <div class="overlay-card" style="text-align:left;">
         <h2>Game Over</h2>
         <div id="endGameStats" style="font-size:0.9rem; line-height:1.4; margin-top:10px;"></div>
 
