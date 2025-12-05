@@ -2614,6 +2614,9 @@ function propertyValueFor(playerId, tileIndex) {
     if (tile.type === "railroad") base = 200;
     if (tile.type === "utility") base = 150;
 
+    // Mortgaged properties are a discount opportunity but still valuable for completing sets.
+    if (tile.mortgaged) base *= 0.65;
+
     if (tile.type === "property" && typeof tile.color === "number") {
         if (ownsFullSet(playerId, tile.color)) base *= 1.4;
     }
@@ -2648,9 +2651,18 @@ function generateTrade(offerer) {
         return out;
     }
 
+    const mortgagedTargets = bPropsOwned.filter(idx => board[idx].mortgaged);
     const mode = Math.random();
 
-    if (mode < 0.35 && aPropsOwned.length && bPropsOwned.length) {
+    // Prioritize buying mortgaged properties at a discount to clear them later.
+    if (mortgagedTargets.length && offerer.money > 300 && Math.random() < 0.55) {
+        const pick = mortgagedTargets[Math.floor(Math.random() * mortgagedTargets.length)];
+        bProps.push(pick);
+        const mortgageCost = Math.floor((board[pick].price || 100) * 0.5);
+        aCash = Math.min(Math.max(80, Math.round(mortgageCost * 0.75)), offerer.money - 50);
+        if (aCash <= 0) return null;
+
+    } else if (mode < 0.35 && aPropsOwned.length && bPropsOwned.length) {
         aProps.push(...pickSome(aPropsOwned));
         bProps.push(...pickSome(bPropsOwned));
 
@@ -2872,12 +2884,24 @@ function findBuildTarget(player) {
             const dev = developments[idx];
             if (!dev) return;
             if (dev.hotel) return;
-            candidates.push({ idx, dev, tile: board[idx] });
+
+            const rentSteps = rentTable[idx] || [];
+            const currentLevel = dev.houses;
+            const nextLevel = dev.houses === 4 ? 5 : dev.houses + 1;
+            const currentRent = rentSteps[currentLevel] || (board[idx].rent || 0);
+            const nextRent = rentSteps[nextLevel] || currentRent;
+            const delta = nextRent - currentRent;
+            const tile = board[idx];
+            const cost = tile.houseCost || 100;
+
+            // Higher delta/cost is more attractive. Also favour higher base rent sets.
+            const score = delta / cost + (tile.price || 0) / 5000;
+            candidates.push({ idx, dev, tile, score, delta, cost });
         });
     });
 
     if (!candidates.length) return null;
-    candidates.sort((a, b) => a.dev.houses - b.dev.houses);
+    candidates.sort((a, b) => b.score - a.score || a.dev.houses - b.dev.houses);
     return candidates[0];
 }
 
@@ -2952,29 +2976,76 @@ function calculateRent(tileIndex, ownerId, diceRoll = null) {
     return baseRent;
 }
 
+function shiftHousesTowardTarget(player, target) {
+    if (!target) return;
+    const targetColor = target.tile.color;
+    const ownedDevs = player.properties
+        .map(idx => ({ idx, dev: developments[idx], tile: board[idx] }))
+        .filter(entry => entry.dev && (entry.dev.houses > 0 || entry.dev.hotel));
+
+    // Sell from the weakest developed properties that are NOT part of the target color.
+    const sellable = ownedDevs.filter(entry => entry.tile.color !== targetColor);
+    sellable.sort((a, b) => {
+        const levelA = a.dev.hotel ? 5 : a.dev.houses;
+        const levelB = b.dev.hotel ? 5 : b.dev.houses;
+        return levelA - levelB;
+    });
+
+    for (const entry of sellable) {
+        if (player.money >= target.cost) break;
+        const { idx, dev, tile } = entry;
+        const houseCost = tile.houseCost || 100;
+        const gain = Math.floor(houseCost / 2);
+
+        if (dev.hotel) {
+            if (remainingHouses < 4) continue;
+            dev.hotel = false;
+            dev.houses = 4;
+            remainingHotels += 1;
+            remainingHouses -= 4;
+            player.money += gain;
+            log(`Rebalances by breaking the hotel on ${tile.name} for $${gain}.`, { player: player.id });
+        } else if (dev.houses > 0) {
+            dev.houses -= 1;
+            remainingHouses += 1;
+            player.money += gain;
+            log(`Rebalances by selling a house on ${tile.name} for $${gain}.`, { player: player.id });
+        }
+
+        refreshDevMarker(idx);
+        renderPlayers();
+        updatePoolHud();
+    }
+}
+
 function maybeBuildHouses(player) {
     if (player.money < 250) return;
 
-    const target = findBuildTarget(player);
-    if (!target) return;
+    let safety = 20; // Prevent infinite loops in edge cases.
+    while (safety-- > 0) {
+        const target = findBuildTarget(player);
+        if (!target) return;
 
-    const { idx, dev, tile } = target;
-    const cost = tile.houseCost || 100;
+        const { idx, dev, tile, cost } = target;
 
-    if (!dev.hotel && dev.houses < 4) {
-        if (player.money >= cost && remainingHouses > 0) {
+        if (!dev.hotel && dev.houses === 4 && remainingHotels <= 0) return;
+        if (dev.hotel) return;
+
+        // If we cannot afford the target, try rebalancing houses from weaker spots.
+        if (player.money < cost && player.money > 120) {
+            shiftHousesTowardTarget(player, target);
+        }
+
+        if (player.money < cost) return;
+
+        if (!dev.hotel && dev.houses < 4) {
+            if (remainingHouses <= 0) return;
             dev.houses += 1;
             remainingHouses -= 1;
             player.money -= cost;
             player.stats.housesBuilt++;
             log(`Builds a house on ${tile.name} for $${cost}.`, { player: player.id });
-            refreshDevMarker(idx);
-            renderPlayers();
-            updatePoolHud();
-        }
-    } else if (!dev.hotel && dev.houses === 4) {
-        // Upgrade to hotel (requires 1 hotel piece; returning 4 houses to bank)
-        if (player.money >= cost && remainingHotels > 0) {
+        } else if (!dev.hotel && dev.houses === 4) {
             dev.houses = 0;
             dev.hotel = true;
             remainingHotels -= 1;
@@ -2982,10 +3053,14 @@ function maybeBuildHouses(player) {
             player.money -= cost;
             player.stats.hotelsBuilt++;
             log(`Upgrades ${tile.name} to a hotel for $${cost}.`, { player: player.id });
-            refreshDevMarker(idx);
-            renderPlayers();
-            updatePoolHud();
         }
+
+        refreshDevMarker(idx);
+        renderPlayers();
+        updatePoolHud();
+
+        // Keep building as long as there is cash and capacity.
+        if (player.money < 150) return;
     }
 }
 
@@ -2996,25 +3071,27 @@ function maybeBuildHouses(player) {
  */
 function maybeUnmortgageProperty(player) {
     if (player.bankrupt) return;
-    const mortgaged = player.properties.filter(idx => board[idx].mortgaged);
+    const mortgaged = player.properties
+        .filter(idx => board[idx].mortgaged)
+        .sort((a, b) => (board[a].price || 0) - (board[b].price || 0));
     if (!mortgaged.length) return;
 
-    if (player.money < 400) return; // keep some threshold
+    let safety = 12;
+    while (safety-- > 0 && mortgaged.length) {
+        const idx = mortgaged[0];
+        const tile = board[idx];
+        const price = tile.price || 0;
+        const cost = Math.floor(price * 0.5);
+        const cushion = 200;
 
-    if (Math.random() > 0.35) return; // not every turn
+        if (player.money - cost < cushion) break;
 
-    const idx = mortgaged[Math.floor(Math.random() * mortgaged.length)];
-    const tile = board[idx];
-    const price = tile.price || 0;
-    if (!price) return;
-
-    const cost = Math.floor(price * 0.5);
-    if (player.money < cost + 200) return; // keep small cushion
-
-    player.money -= cost;
-    tile.mortgaged = false;
-    log(`${player.name} quietly pays $${cost} to unmortgage ${tile.name}.`, { player: player.id });
-    renderPlayers();
+        player.money -= cost;
+        tile.mortgaged = false;
+        mortgaged.shift();
+        log(`${player.name} unmortgages ${tile.name} for $${cost}.`, { player: player.id });
+        renderPlayers();
+    }
 }
 
 /* ========== LIQUIDATION & BANKRUPTCY ========== */
