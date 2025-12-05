@@ -203,6 +203,7 @@
         transform: translate(-50%, -50%);
         transition: left 0.35s ease-out, top 0.35s ease-out;
         pointer-events: none;
+        z-index: 30;
     }
 
     .token::after {
@@ -255,7 +256,7 @@
         box-shadow: 0 0 10px rgba(0,0,0,0.7);
         transform: translate(-50%, -50%) rotate(-10deg);
         pointer-events: none;
-        z-index: 24;
+        z-index: 12;
         opacity: 0.92;
     }
 
@@ -1748,10 +1749,17 @@ function log(msg, opts = {}) {
     logScrollEl.scrollTop = logScrollEl.scrollHeight;
 }
 
-function ownsFullSet(playerId, color) {
+function ownsFullSet(playerId, color, options = {}) {
     const group = colorGroups[color] || [];
     if (!group.length) return false;
-    return group.every(idx => ownership[idx] === playerId);
+
+    const requireUnmortgaged = options.requireUnmortgaged === true;
+
+    return group.every(idx => {
+        if (ownership[idx] !== playerId) return false;
+        if (requireUnmortgaged && board[idx].mortgaged) return false;
+        return true;
+    });
 }
 
 function colorGroupHasBuildings(tileIndex, ownerId = null) {
@@ -2765,7 +2773,7 @@ function playerMonopolies(playerId) {
     const m = [];
     Object.keys(colorGroups).forEach(k => {
         const color = Number(k);
-        if (ownsFullSet(playerId, color)) m.push(color);
+        if (ownsFullSet(playerId, color, { requireUnmortgaged: true })) m.push(color);
     });
     return m;
 }
@@ -2820,6 +2828,8 @@ function calculateRent(tileIndex, ownerId, diceRoll = null) {
     const tile = board[tileIndex];
     const dev = developments[tileIndex];
 
+    if (tile.mortgaged) return 0;
+
     if (tile.type === "railroad") {
         const count = players[ownerId].properties.filter(
             idx => board[idx].type === "railroad"
@@ -2843,7 +2853,7 @@ function calculateRent(tileIndex, ownerId, diceRoll = null) {
     const baseRent = rents[0];
 
     if (!dev.houses && !dev.hotel) {
-        return ownsFullSet(ownerId, tile.color)
+        return ownsFullSet(ownerId, tile.color, { requireUnmortgaged: true })
             ? baseRent * 2
             : baseRent;
     }
@@ -3136,6 +3146,11 @@ async function handleLanding(player, roll) {
             } else if (owner === player.id) {
                 log(`Lands on ${tile.name}, already owned.`, { player: player.id, boring: true });
             } else {
+                if (tile.mortgaged) {
+                    log(`Lands on ${tile.name}, but it's mortgaged under ${players[owner].name}. No rent due.`, { player: player.id });
+                    break;
+                }
+
                 const rent = calculateRent(player.pos, owner, roll);
                 log(`Lands on ${tile.name} owned by ${players[owner].name}. Rent due: $${rent}.`, { player: player.id });
                 await sleep(450);
