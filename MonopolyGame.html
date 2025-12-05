@@ -954,6 +954,11 @@
         background: #fffdf4;
         border: 1px solid #000;
         border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.9rem;
+        color: #111;
     }
 
     .property-card::before {
@@ -963,6 +968,11 @@
         width: 100%;
         height: 7px;
         background: var(--prop-color, #ccc);
+    }
+
+    .property-icon {
+        z-index: 1;
+        line-height: 1;
     }
 
     /* Mortgage look: red diagonal band */
@@ -2110,25 +2120,48 @@ function renderPlayerCards() {
         const propGrid = document.createElement("div");
         propGrid.className = "property-grid";
 
-        // Group properties:
-        // - NON-MORTGAGED: no stacking (unique per property index)
-        // - MORTGAGED: stack by color (all mortgaged browns together, all mortgaged reds together, etc.)
-        const normalGroups = {};   // key -> { bandColor, mortgaged:false, count }
-        const mortgagedGroups = {}; // key -> { bandColor, mortgaged:true, count }
+        const normalGroups = {};   // key -> { bandColor, mortgaged:false, count, order, icon }
+        const mortgagedGroups = {}; // key -> { bandColor, mortgaged:true, count, order, icon }
+
+        function getBandColor(t) {
+            if (t.type === "property" && typeof t.color === "number" && colorBandMap[t.color]) {
+                return colorBandMap[t.color];
+            }
+            if (t.type === "railroad") return "#000";
+            if (t.type === "utility") return "#aaa";
+            return "#ccc";
+        }
+
+        function getPropertyIcon(t) {
+            if (t.type === "railroad") return "🚂";
+            if (t.type === "utility") {
+                return t.name.includes("Water") ? "💧" : "💡";
+            }
+            return "";
+        }
+
+        function getPropertyOrder(t) {
+            if (t.type === "property" && typeof t.color === "number") return t.color;
+            if (t.type === "utility") return 8 + (t.name.includes("Water") ? 0.5 : 0);
+            if (t.type === "railroad") {
+                const order = [
+                    "Reading Railroad",
+                    "Pennsylvania Railroad",
+                    "B. & O. Railroad",
+                    "Short Line"
+                ];
+                const idx = order.indexOf(t.name);
+                return 9 + (idx === -1 ? 0 : idx / 10);
+            }
+            return 99;
+        }
 
         p.properties.forEach(idx => {
             const t = board[idx];
 
-            // Determine band color
-            let bandColor = "#ccc";
-            if (t.type === "property" && typeof t.color === "number" && colorBandMap[t.color]) {
-                bandColor = colorBandMap[t.color];
-            } else if (t.type === "railroad") {
-                bandColor = "#000";
-            } else if (t.type === "utility") {
-                bandColor = "#aaa";
-            }
-
+            const bandColor = getBandColor(t);
+            const icon = getPropertyIcon(t);
+            const order = getPropertyOrder(t);
             const isMortgaged = !!t.mortgaged;
 
             let key;
@@ -2149,7 +2182,9 @@ function renderPlayerCards() {
                 target[key] = {
                     bandColor,
                     mortgaged: isMortgaged,
-                    count: 0
+                    count: 0,
+                    icon,
+                    order
                 };
             }
             target[key].count++;
@@ -2164,6 +2199,13 @@ function renderPlayerCards() {
                 card.classList.add("mortgaged");
             }
 
+            if (group.icon) {
+                const iconEl = document.createElement("div");
+                iconEl.className = "property-icon";
+                iconEl.textContent = group.icon;
+                card.appendChild(iconEl);
+            }
+
             // If there’s more than one card in this stack, show a count badge
             if (group.count > 1) {
                 const badge = document.createElement("div");
@@ -2176,14 +2218,18 @@ function renderPlayerCards() {
         }
 
         // First show normal properties (each as its own square)
-        Object.values(normalGroups).forEach(group => {
-            propGrid.appendChild(makePropertyCard(group));
-        });
+        Object.values(normalGroups)
+            .sort((a, b) => a.order - b.order)
+            .forEach(group => {
+                propGrid.appendChild(makePropertyCard(group));
+            });
 
         // Then show mortgaged stacks grouped by color/type
-        Object.values(mortgagedGroups).forEach(group => {
-            propGrid.appendChild(makePropertyCard(group));
-        });
+        Object.values(mortgagedGroups)
+            .sort((a, b) => a.order - b.order)
+            .forEach(group => {
+                propGrid.appendChild(makePropertyCard(group));
+            });
 
         // Assemble the section
         scroll.appendChild(cardGrid);
