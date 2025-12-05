@@ -2587,6 +2587,147 @@ async function showCardOverlay(type, message) {
     cardOverlayEl.classList.remove("visible");
 }
 
+/* ========== CARD DECKS ========== */
+
+const chanceCards = [
+    { id: "chance_boardwalk", text: "Advance to Boardwalk." },
+    { id: "chance_go", text: "Advance to Go (Collect $200)." },
+    { id: "chance_illinois", text: "Advance to Illinois Avenue. If you pass Go, collect $200." },
+    { id: "chance_st_charles", text: "Advance to St. Charles Place. If you pass Go, collect $200." },
+    { id: "chance_nearest_utility", text: "Advance token to nearest Utility. If unowned, you may buy it from the Bank. If owned, throw dice and pay owner 10 times the amount thrown." },
+    { id: "chance_nearest_railroad_a", text: "Advance token to the nearest Railroad and pay owner twice the rental to which they are otherwise entitled. If Railroad is unowned, you may buy it from the Bank." },
+    { id: "chance_nearest_railroad_b", text: "Advance token to the nearest Railroad and pay owner twice the rental to which they are otherwise entitled. If Railroad is unowned, you may buy it from the Bank." },
+    { id: "chance_dividend", text: "Bank pays you dividend of $50." },
+    { id: "chance_jail_free", text: "Get out of Jail Free. This card may be kept until needed or sold.", keep: true },
+    { id: "chance_back_three", text: "Go back three spaces." },
+    { id: "chance_go_to_jail", text: "Go directly to Jail. Do not pass Go, do not collect $200." },
+    { id: "chance_repairs", text: "Make general repairs on all your property: For each house pay $25, for each hotel $100." },
+    { id: "chance_poor_tax", text: "Pay poor tax of $15." },
+    { id: "chance_reading", text: "Take a trip to Reading Railroad. If you pass Go, collect $200." },
+    { id: "chance_boardwalk_walk", text: "Take a walk on the Boardwalk. Advance token to Boardwalk." },
+    { id: "chance_chairman", text: "You have been elected Chairman of the Board. Pay each player $50." },
+];
+
+const communityCards = [
+    { id: "community_go", text: "Advance to Go (Collect $200)." },
+    { id: "community_bank_error", text: "Bank error in your favor. Collect $200." },
+    { id: "community_doctors_fee", text: "Doctor’s fees. Pay $50." },
+    { id: "community_stock_sale", text: "From sale of stock you get $50." },
+    { id: "community_jail_free", text: "Get Out of Jail Free. This card may be kept until needed or sold.", keep: true },
+    { id: "community_go_to_jail", text: "Go to Jail. Go directly to Jail. Do not pass Go. Do not collect $200." },
+    { id: "community_opera", text: "Grand Opera Night. Collect $50 from every player for opening night seats." },
+    { id: "community_holiday", text: "Holiday Fund matures. Receive $100." },
+    { id: "community_tax_refund", text: "Income tax refund. Collect $20." },
+    { id: "community_birthday", text: "It is your birthday. Collect $10 from each player." },
+    { id: "community_life_insurance", text: "Life insurance matures. Collect $100." },
+    { id: "community_hospital", text: "Hospital fees. Pay $100." },
+    { id: "community_school", text: "School fees. Pay $50." },
+    { id: "community_consultancy", text: "Receive $25 consultancy fee." },
+    { id: "community_street_repairs", text: "You are assessed for street repairs: $40 per house and $115 per hotel." },
+    { id: "community_beauty", text: "You have won second prize in a beauty contest. Collect $10." },
+];
+
+let chanceDeck = [];
+let communityDeck = [];
+
+const chanceJailCard = chanceCards.find(c => c.id === "chance_jail_free");
+const communityJailCard = communityCards.find(c => c.id === "community_jail_free");
+
+function shuffleCards(cards) {
+    const arr = [...cards];
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
+function drawCard(type) {
+    const source = type === "chance" ? chanceCards : communityCards;
+    const deck = type === "chance" ? chanceDeck : communityDeck;
+
+    if (!deck.length) {
+        deck.push(...shuffleCards(source));
+    }
+
+    return deck.shift();
+}
+
+function recycleJailCard(type) {
+    if (type === "chance") {
+        chanceDeck.push(chanceJailCard);
+    } else {
+        communityDeck.push(communityJailCard);
+    }
+}
+
+/* ========== CARD HELPERS ========== */
+
+async function movePlayerTo(player, targetIndex, { grantPassGo = true } = {}) {
+    if (grantPassGo) {
+        const steps = (targetIndex - player.pos + board.length) % board.length;
+        if (steps > 0) {
+            await animateMove(player, steps);
+        }
+    } else {
+        player.pos = targetIndex;
+        updateAllTokenPositions();
+        await fastSleep(400 + Math.random() * 200);
+    }
+}
+
+function nearestIndex(startIndex, predicate) {
+    for (let i = 1; i < board.length; i++) {
+        const idx = (startIndex + i) % board.length;
+        if (predicate(board[idx])) return idx;
+    }
+    return startIndex;
+}
+
+function countPlayerBuildings(player) {
+    let houses = 0;
+    let hotels = 0;
+
+    player.properties.forEach(idx => {
+        const dev = developments[idx];
+        if (!dev) return;
+        houses += dev.houses;
+        if (dev.hotel) hotels += 1;
+    });
+
+    return { houses, hotels };
+}
+
+async function ensurePayment(player, amount, { recipientId = null, description = "", trackRent = true } = {}) {
+    if (amount <= 0) return true;
+
+    if (player.money < amount) {
+        if (description) {
+            log(description, { player: player.id });
+        }
+        await attemptLiquidation(player, amount);
+
+        if (player.money < amount) {
+            log(`Cannot raise enough to cover $${amount} and is declared bankrupt.`, {
+                player: player.id,
+                frustrating: true
+            });
+            await handleBankruptcy(player, recipientId);
+            return false;
+        }
+    }
+
+    player.money -= amount;
+    if (recipientId !== null) {
+        players[recipientId].money += amount;
+        if (trackRent) {
+            players[recipientId].stats.rentReceived += amount;
+        }
+    }
+    renderPlayers();
+    return true;
+}
+
 /* ========== TRADING SYSTEM ========== */
 
 function canTradeProperty(tileIndex) {
@@ -3394,83 +3535,290 @@ async function handleLanding(player, roll) {
 }
 
 async function handleChance(player) {
-    const r = Math.random();
-    if (r < 0.25) {
-        await showCardOverlay("chance", "Go back three spaces.");
-        log("Draws a Chance card: move back three spaces.", { player: player.id });
+    const card = drawCard("chance");
+    await showCardOverlay("chance", card.text);
 
-        for (let i = 0; i < 3; i++) {
-            player.pos = (player.pos - 1 + board.length) % board.length;
-            updateAllTokenPositions();
-            await sleep(380 + Math.random() * 220);
+    switch (card.id) {
+        case "chance_boardwalk":
+        case "chance_boardwalk_walk": {
+            log("Draws a Chance card: advance to Boardwalk.", { player: player.id });
+            await movePlayerTo(player, 39, { grantPassGo: true });
+            await handleLanding(player, null);
+            break;
         }
+        case "chance_go": {
+            log("Draws a Chance card: advance to GO.", { player: player.id });
+            const steps = (40 - player.pos) % 40;
+            await animateMove(player, steps);
+            await handleLanding(player, null);
+            break;
+        }
+        case "chance_illinois": {
+            log("Draws a Chance card: advance to Illinois Avenue.", { player: player.id });
+            await movePlayerTo(player, 24, { grantPassGo: true });
+            await handleLanding(player, null);
+            break;
+        }
+        case "chance_st_charles": {
+            log("Draws a Chance card: advance to St. Charles Place.", { player: player.id });
+            await movePlayerTo(player, 11, { grantPassGo: true });
+            await handleLanding(player, null);
+            break;
+        }
+        case "chance_nearest_utility": {
+            const target = nearestIndex(player.pos, tile => tile.type === "utility");
+            log(`Draws a Chance card: advance to ${board[target].name}.`, { player: player.id });
+            await movePlayerTo(player, target, { grantPassGo: true });
 
-        await handleLanding(player, null);
-    } else if (r < 0.5) {
-        const bonus = 50;
-        await showCardOverlay("chance", `Collect $${bonus}.`);
-        log(`Draws a Chance card: receives $${bonus}.`, { player: player.id });
-        player.money += bonus;
-        renderPlayers();
-    } else if (r < 0.75) {
-        await showCardOverlay("chance", "Advance to GO and collect $200.");
-        log("Draws a Chance card: advance to GO.", { player: player.id });
+            const owner = ownership[target];
+            if (owner == null) {
+                await handleLanding(player, null);
+                break;
+            }
+            if (owner === player.id) {
+                log(`Lands on ${board[target].name}, which ${player.name} already owns.`, { player: player.id, boring: true });
+                break;
+            }
+            if (board[target].mortgaged) {
+                log(`Lands on mortgaged ${board[target].name}; no payment due.`, { player: player.id, boring: true });
+                break;
+            }
+            const diceRoll = rollDice();
+            const rent = diceRoll.total * 10;
+            log(`Pays ${players[owner].name} $${rent} (10x the rolled ${diceRoll.total}).`, { player: player.id });
+            const paid = await ensurePayment(player, rent, { recipientId: owner });
+            if (paid) {
+                player.stats.rentPaid += rent;
+            }
+            break;
+        }
+        case "chance_nearest_railroad_a":
+        case "chance_nearest_railroad_b": {
+            const target = nearestIndex(player.pos, tile => tile.type === "railroad");
+            log(`Draws a Chance card: advance to ${board[target].name}.`, { player: player.id });
+            await movePlayerTo(player, target, { grantPassGo: true });
 
-        const steps = (40 - player.pos) % 40;
-        await animateMove(player, steps);
-        await handleLanding(player, null);
-    } else {
-        await showCardOverlay("chance", "Get Out of Jail Free.\nKeep this card until needed.");
-        log("Draws a Chance card: Get Out of Jail Free (kept).", { player: player.id });
-        playerCards[player.id].jailFreeChance += 1;
-        renderPlayerCards();
+            const owner = ownership[target];
+            if (owner == null) {
+                await handleLanding(player, null);
+                break;
+            }
+            if (owner === player.id) {
+                log(`Lands on ${board[target].name}, which ${player.name} already owns.`, { player: player.id, boring: true });
+                break;
+            }
+            if (board[target].mortgaged) {
+                log(`Lands on mortgaged ${board[target].name}; no payment due.`, { player: player.id, boring: true });
+                break;
+            }
+            const rent = calculateRent(target, owner) * 2;
+            log(`Pays double railroad rent of $${rent} to ${players[owner].name}.`, { player: player.id });
+            const paid = await ensurePayment(player, rent, { recipientId: owner });
+            if (paid) {
+                player.stats.rentPaid += rent;
+            }
+            break;
+        }
+        case "chance_dividend": {
+            const bonus = 50;
+            log(`Draws a Chance card: bank dividend of $${bonus}.`, { player: player.id });
+            player.money += bonus;
+            renderPlayers();
+            break;
+        }
+        case "chance_jail_free": {
+            log("Draws a Chance card: Get Out of Jail Free (kept).", { player: player.id });
+            playerCards[player.id].jailFreeChance += 1;
+            renderPlayerCards();
+            break;
+        }
+        case "chance_back_three": {
+            log("Draws a Chance card: go back three spaces.", { player: player.id });
+            for (let i = 0; i < 3; i++) {
+                player.pos = (player.pos - 1 + board.length) % board.length;
+                updateAllTokenPositions();
+                await sleep(380 + Math.random() * 220);
+            }
+            await handleLanding(player, null);
+            break;
+        }
+        case "chance_go_to_jail": {
+            log("Draws a Chance card: go directly to Jail.", { player: player.id });
+            player.inJail = true;
+            player.jailTurns = 3;
+            player.pos = 10;
+            updateAllTokenPositions();
+            renderPlayers();
+            break;
+        }
+        case "chance_repairs": {
+            const { houses, hotels } = countPlayerBuildings(player);
+            const total = houses * 25 + hotels * 100;
+            log(`Draws a Chance card: pay $25 per house and $100 per hotel (Total: $${total}).`, { player: player.id });
+            await ensurePayment(player, total, { description: `${player.name} begins liquidating assets to cover repairs.` });
+            renderPlayers();
+            break;
+        }
+        case "chance_poor_tax": {
+            const amount = 15;
+            log(`Draws a Chance card: pay poor tax of $${amount}.`, { player: player.id });
+            await ensurePayment(player, amount, { description: `${player.name} cannot afford the poor tax and starts liquidating assets…` });
+            break;
+        }
+        case "chance_reading": {
+            log("Draws a Chance card: take a trip to Reading Railroad.", { player: player.id });
+            await movePlayerTo(player, 5, { grantPassGo: true });
+            await handleLanding(player, null);
+            break;
+        }
+        case "chance_chairman": {
+            const recipients = players.filter(p => p.id !== player.id && !p.bankrupt);
+            const total = recipients.length * 50;
+            log(`Draws a Chance card: pay each player $50 (Total: $${total}).`, { player: player.id });
+            const paid = await ensurePayment(player, total, { description: `${player.name} is short on cash to pay everyone and starts liquidating assets…` });
+            if (paid) {
+                recipients.forEach(p => p.money += 50);
+                renderPlayers();
+            }
+            break;
+        }
+        default:
+            break;
     }
 }
 
 async function handleCommunity(player) {
-    const r = Math.random();
-    if (r < 0.25) {
-        const fine = 50;
-        await showCardOverlay("community", `Pay $${fine}.`);
-        log(`Draws a Community Chest card: pays $${fine}.`, { player: player.id });
+    const card = drawCard("community");
+    await showCardOverlay("community", card.text);
 
-        if (player.money < fine) {
-            log(`${player.name} cannot afford the fee and starts liquidating assets…`, { player: player.id });
-
-            await attemptLiquidation(player, fine);
-
-            if (player.money < fine) {
-                log(`Cannot raise enough to pay $${fine} and is declared bankrupt.`, {
-                    player: player.id,
-                    frustrating: true
-                });
-                await handleBankruptcy(player, owner);
-                return;
-            }
+    switch (card.id) {
+        case "community_go": {
+            log("Draws a Community Chest card: advance to GO.", { player: player.id });
+            const steps = (40 - player.pos) % 40;
+            await animateMove(player, steps);
+            await handleLanding(player, null);
+            break;
         }
-
-        player.money -= fine;
-        renderPlayers();
-
-    } else if (r < 0.5) {
-        const bonus = 100;
-        await showCardOverlay("community", `Collect $${bonus}.`);
-        log(`Draws a Community Chest card: receives $${bonus}.`, { player: player.id });
-        player.money += bonus;
-        renderPlayers();
-    } else if (r < 0.75) {
-        await showCardOverlay("community", "Go directly to Jail.");
-        log("Draws a Community Chest card: go directly to Jail.", { player: player.id });
-        player.inJail = true;
-        player.jailTurns = 3;
-        player.pos = 10;
-        updateAllTokenPositions();
-        renderPlayers();
-    } else {
-        await showCardOverlay("community", "Get Out of Jail Free.\nKeep this card until needed.");
-        log("Draws a Community Chest card: Get Out of Jail Free (kept).", { player: player.id });
-        playerCards[player.id].jailFreeChest += 1;
-        renderPlayerCards();
+        case "community_bank_error": {
+            const bonus = 200;
+            log(`Draws a Community Chest card: collect $${bonus} (bank error).`, { player: player.id });
+            player.money += bonus;
+            renderPlayers();
+            break;
+        }
+        case "community_doctors_fee": {
+            const amount = 50;
+            log("Draws a Community Chest card: pay doctor's fees of $50.", { player: player.id });
+            await ensurePayment(player, amount, { description: `${player.name} begins liquidating assets to pay the doctor.` });
+            break;
+        }
+        case "community_stock_sale": {
+            const bonus = 50;
+            log("Draws a Community Chest card: receive $50 from stock sale.", { player: player.id });
+            player.money += bonus;
+            renderPlayers();
+            break;
+        }
+        case "community_jail_free": {
+            log("Draws a Community Chest card: Get Out of Jail Free (kept).", { player: player.id });
+            playerCards[player.id].jailFreeChest += 1;
+            renderPlayerCards();
+            break;
+        }
+        case "community_go_to_jail": {
+            log("Draws a Community Chest card: go directly to Jail.", { player: player.id });
+            player.inJail = true;
+            player.jailTurns = 3;
+            player.pos = 10;
+            updateAllTokenPositions();
+            renderPlayers();
+            break;
+        }
+        case "community_opera": {
+            const recipients = players.filter(p => p.id !== player.id && !p.bankrupt);
+            const total = recipients.length * 50;
+            log(`Draws a Community Chest card: collect $50 from each player (Total: $${total}).`, { player: player.id });
+            for (const donor of recipients) {
+                await ensurePayment(donor, 50, {
+                    recipientId: player.id,
+                    description: `${donor.name} is short on cash for Grand Opera Night and begins liquidating assets…`,
+                    trackRent: false
+                });
+            }
+            renderPlayers();
+            break;
+        }
+        case "community_holiday": {
+            const bonus = 100;
+            log("Draws a Community Chest card: Holiday Fund matures. Collect $100.", { player: player.id });
+            player.money += bonus;
+            renderPlayers();
+            break;
+        }
+        case "community_tax_refund": {
+            const bonus = 20;
+            log("Draws a Community Chest card: Income tax refund of $20.", { player: player.id });
+            player.money += bonus;
+            renderPlayers();
+            break;
+        }
+        case "community_birthday": {
+            const donors = players.filter(p => p.id !== player.id && !p.bankrupt);
+            const total = donors.length * 10;
+            log(`Draws a Community Chest card: birthday! Collect $10 from each player (Total: $${total}).`, { player: player.id });
+            for (const donor of donors) {
+                await ensurePayment(donor, 10, {
+                    recipientId: player.id,
+                    description: `${donor.name} looks for $10 to cover the birthday gift…`,
+                    trackRent: false
+                });
+            }
+            renderPlayers();
+            break;
+        }
+        case "community_life_insurance": {
+            const bonus = 100;
+            log("Draws a Community Chest card: Life insurance matures. Collect $100.", { player: player.id });
+            player.money += bonus;
+            renderPlayers();
+            break;
+        }
+        case "community_hospital": {
+            const amount = 100;
+            log("Draws a Community Chest card: pay hospital fees of $100.", { player: player.id });
+            await ensurePayment(player, amount, { description: `${player.name} needs cash for hospital fees.` });
+            break;
+        }
+        case "community_school": {
+            const amount = 50;
+            log("Draws a Community Chest card: pay school fees of $50.", { player: player.id });
+            await ensurePayment(player, amount, { description: `${player.name} starts liquidating assets to pay school fees.` });
+            break;
+        }
+        case "community_consultancy": {
+            const bonus = 25;
+            log("Draws a Community Chest card: receive $25 consultancy fee.", { player: player.id });
+            player.money += bonus;
+            renderPlayers();
+            break;
+        }
+        case "community_street_repairs": {
+            const { houses, hotels } = countPlayerBuildings(player);
+            const total = houses * 40 + hotels * 115;
+            log(`Draws a Community Chest card: pay $40 per house and $115 per hotel (Total: $${total}).`, { player: player.id });
+            await ensurePayment(player, total, { description: `${player.name} starts liquidating assets to pay for street repairs.` });
+            renderPlayers();
+            break;
+        }
+        case "community_beauty": {
+            const bonus = 10;
+            log("Draws a Community Chest card: beauty contest prize. Collect $10.", { player: player.id });
+            player.money += bonus;
+            renderPlayers();
+            break;
+        }
+        default:
+            break;
     }
 }
 
@@ -3509,14 +3857,21 @@ async function takeTurn(player) {
             const totalJailCards = cards.jailFreeChance + cards.jailFreeChest;
 
             if (totalJailCards > 0) {
-                if (cards.jailFreeChance > 0) cards.jailFreeChance -= 1;
-                else cards.jailFreeChest -= 1;
+                let usedType = null;
+                if (cards.jailFreeChance > 0) {
+                    cards.jailFreeChance -= 1;
+                    usedType = "chance";
+                } else {
+                    cards.jailFreeChest -= 1;
+                    usedType = "community";
+                }
 
                 log("Uses a Get Out of Jail Free card.", { player: player.id });
                 player.inJail = false;
                 player.jailTurns = 0;
                 renderPlayers();
                 renderPlayerCards();
+                recycleJailCard(usedType);
 
             } else {
                 if (player.jailTurns > 0) {
