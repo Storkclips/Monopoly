@@ -1808,6 +1808,10 @@ function updatePoolHud() {
 /* ========== TOKEN & POSITIONS ========== */
 
 function createTokens() {
+    // Remove any existing tokens from a prior game before recreating them
+    tokens.forEach(t => t?.remove());
+    tokens.length = 0;
+
     players.forEach(p => {
         const t = document.createElement("div");
         t.className = "token";
