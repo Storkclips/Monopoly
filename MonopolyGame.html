@@ -3014,6 +3014,36 @@ function playerMonopolies(playerId) {
     return m;
 }
 
+function getDevelopmentLevel(dev) {
+    if (!dev) return 0;
+    return dev.hotel ? 5 : dev.houses;
+}
+
+function canBuildHouseEvenly(tileIndex) {
+    const tile = board[tileIndex];
+    const dev = developments[tileIndex];
+    if (!tile || !dev) return false;
+    if (dev.hotel || dev.houses >= 4) return false;
+
+    const group = colorGroups[tile.color] || [];
+    if (!group.length) return false;
+
+    const minLevel = Math.min(...group.map(idx => getDevelopmentLevel(developments[idx])));
+    return getDevelopmentLevel(dev) === minLevel;
+}
+
+function canUpgradeToHotelEvenly(tileIndex) {
+    const tile = board[tileIndex];
+    const dev = developments[tileIndex];
+    if (!tile || !dev) return false;
+    if (dev.hotel || dev.houses !== 4) return false;
+
+    const group = colorGroups[tile.color] || [];
+    if (!group.length) return false;
+
+    return group.every(idx => getDevelopmentLevel(developments[idx]) >= 4);
+}
+
 function findBuildTarget(player) {
     const monos = playerMonopolies(player.id);
     if (!monos.length) return null;
@@ -3025,6 +3055,9 @@ function findBuildTarget(player) {
             const dev = developments[idx];
             if (!dev) return;
             if (dev.hotel) return;
+
+            if (dev.houses < 4 && !canBuildHouseEvenly(idx)) return;
+            if (dev.houses === 4 && !canUpgradeToHotelEvenly(idx)) return;
 
             const rentSteps = rentTable[idx] || [];
             const currentLevel = dev.houses;
