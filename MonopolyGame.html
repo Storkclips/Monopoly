@@ -2991,6 +2991,26 @@ async function maybeAttemptTrade(player) {
 /* ========== AI DECISIONS & BUILDING ========== */
 
 function shouldBuyProperty(player, tile) {
+    if (tile.type === "railroad") {
+        const ownedRailroads = board.reduce((count, t, idx) =>
+            count + (t.type === "railroad" && ownership[idx] === player.id ? 1 : 0), 0
+        );
+
+        // Railroads scale with each one owned; lean toward securing as many as possible
+        const eager = ownedRailroads >= 2 || player.money > 700;
+        return Math.random() < (eager ? 0.88 : ownedRailroads > 0 ? 0.78 : 0.62);
+    }
+
+    if (tile.type === "utility") {
+        const ownedUtilities = board.reduce((count, t, idx) =>
+            count + (t.type === "utility" && ownership[idx] === player.id ? 1 : 0), 0
+        );
+
+        // Owning both utilities greatly improves rent; prioritize the pair when affordable
+        const comfortable = player.money > 450;
+        return Math.random() < (ownedUtilities > 0 ? 0.86 : comfortable ? 0.7 : 0.55);
+    }
+
     if (player.money > 900 && tile.price <= 240) {
         return Math.random() < 0.25;
     }
