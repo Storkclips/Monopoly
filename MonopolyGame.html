@@ -867,9 +867,10 @@
         border-radius: 12px;
         background: rgba(0,0,0,0.45);
         padding: 8px 9px;
-        flex: 1;
-        overflow-y: auto;
         font-size: 0.7rem;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
     }
 
     .player-card-section {
@@ -890,9 +891,10 @@
     }
 
     .player-card-scroll {
-        max-height: 130px;
-        overflow-y: auto;
         padding-right: 2px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
     }
 
     .card-grid,
@@ -992,14 +994,12 @@
 
             <div class="panel-title" style="margin-top:8px;">Monopolies & Builds</div>
             <div class="log-panel" style="
-                max-height: 130px;
-                min-height: 90px;
-                overflow-y: auto;
                 border-radius: 12px;
                 background: rgba(0,0,0,0.45);
                 padding: 8px 10px;
+                overflow: visible;
             ">
-                <div id="buildSummary" style="font-size:0.74rem; line-height:1.2;"></div>
+                <div id="buildSummary" style="font-size:0.74rem; line-height:1.2; word-wrap: break-word;"></div>
             </div>
         </section>
 
