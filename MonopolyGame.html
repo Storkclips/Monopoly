@@ -240,6 +240,25 @@
         background: #8e1f1f;
     }
 
+    /* Mortgage badge on board tiles */
+    .mortgage-marker {
+        position: absolute;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, rgba(170, 0, 0, 0.9), rgba(110, 0, 0, 0.9));
+        color: #fff8e1;
+        font-size: 0.58rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        border: 1px solid rgba(0, 0, 0, 0.55);
+        box-shadow: 0 0 10px rgba(0,0,0,0.7);
+        transform: translate(-50%, -50%) rotate(-10deg);
+        pointer-events: none;
+        z-index: 24;
+        opacity: 0.92;
+    }
+
     /* POOL HUD (limited houses / hotels) */
     .pool-hud {
         position: absolute;
@@ -1497,6 +1516,7 @@ const poolHotelsValueEl = document.getElementById("poolHotelsValue");
 
 const tokens = [];
 const devMarkers = {};
+const mortgageMarkers = {};
 let currentPlayerIndex = 0;
 
 /* ========== GM MODE STATE ========== */
@@ -1939,6 +1959,58 @@ function refreshAllDevMarkers() {
     });
 }
 
+function getMortgageMarkerPos(tileIndex) {
+    const size = boardWrapper.clientWidth;
+    const calib = tileCalib[tileIndex];
+
+    if (calib && calib.owner) {
+        return {
+            x: calib.owner.x * size,
+            y: calib.owner.y * size
+        };
+    }
+
+    const center = tileCenter(tileIndex);
+    const boardCenter = { x: size / 2, y: size / 2 };
+    const dx = boardCenter.x - center.x;
+    const dy = boardCenter.y - center.y;
+    const len = Math.hypot(dx, dy) || 1;
+
+    return {
+        x: center.x + (dx / len) * 18,
+        y: center.y + (dy / len) * 18
+    };
+}
+
+function refreshMortgageMarker(tileIndex) {
+    const tile = board[tileIndex];
+    if (!tile) return;
+
+    let marker = mortgageMarkers[tileIndex];
+
+    if (!tile.mortgaged) {
+        if (marker) marker.style.display = "none";
+        return;
+    }
+
+    if (!marker) {
+        marker = document.createElement("div");
+        marker.className = "mortgage-marker";
+        marker.textContent = "MORTGAGED";
+        boardWrapper.appendChild(marker);
+        mortgageMarkers[tileIndex] = marker;
+    }
+
+    const pos = getMortgageMarkerPos(tileIndex);
+    marker.style.left = pos.x + "px";
+    marker.style.top = pos.y + "px";
+    marker.style.display = "flex";
+}
+
+function refreshAllMortgageMarkers() {
+    board.forEach((_, idx) => refreshMortgageMarker(idx));
+}
+
 /* ========== UI: PLAYERS, CARD GRID & BUILD SUMMARY ========== */
 
 function renderPlayerCards() {
@@ -2153,6 +2225,7 @@ function renderPlayers() {
 
     buildSummaryEl.innerHTML = summary || "<div>No monopolies yet.</div>";
     renderPlayerCards();
+    refreshAllMortgageMarkers();
 }
 
 /* ========== DICE ========== */
@@ -3542,6 +3615,7 @@ boardWrapper.addEventListener("click", (e) => {
     }
 
     renderGMMarkers();
+    refreshMortgageMarker(idx);
 });
 
 /* ========== START ========== */
@@ -3573,6 +3647,10 @@ function restartGame() {
         developments[i].hotel = false;
     });
 
+    board.forEach(tile => {
+        if (tile) tile.mortgaged = false;
+    });
+
     remainingHouses = TOTAL_HOUSES;
     remainingHotels = TOTAL_HOTELS;
 
@@ -3586,6 +3664,7 @@ function restartGame() {
 
     populateGMMoneyPlayerOptions();
     refreshAllDevMarkers();
+    refreshAllMortgageMarkers();
     updateAllTokenPositions(true);
     renderPlayers();
     logScrollEl.innerHTML = "";
