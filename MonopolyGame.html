@@ -1808,6 +1808,10 @@ function updatePoolHud() {
 /* ========== TOKEN & POSITIONS ========== */
 
 function createTokens() {
+    // Remove any existing tokens from a prior game before recreating them
+    tokens.forEach(t => t?.remove());
+    tokens.length = 0;
+
     players.forEach(p => {
         const t = document.createElement("div");
         t.className = "token";
@@ -1850,6 +1854,39 @@ function tileCenter(index) {
     };
 }
 
+function tokenBasePosition(index, inJail = false) {
+    const size = boardWrapper.clientWidth;
+    const center = tileCenter(index);
+    const calib = tileCalib[index];
+
+    // Exact calibration for Jail / Just Visiting
+    if (index === 10) {
+        if (inJail) {
+            return { x: size * 0.0787, y: size * 0.9075 };
+        }
+        return { x: size * 0.0212, y: size * 0.9762 };
+    }
+
+    // Match the general placement used for houses/hotels when available
+    if (calib?.house) {
+        return { x: calib.house.x * size, y: calib.house.y * size };
+    }
+    if (calib?.hotel) {
+        return { x: calib.hotel.x * size, y: calib.hotel.y * size };
+    }
+
+    const boardCenter = { x: size / 2, y: size / 2 };
+    const dx = boardCenter.x - center.x;
+    const dy = boardCenter.y - center.y;
+    const len = Math.hypot(dx, dy) || 1;
+
+    // Default placement hugs the board interior similar to development markers
+    return {
+        x: center.x + (dx / len) * 22,
+        y: center.y + (dy / len) * 22
+    };
+}
+
 function updateAllTokenPositions(initial = false) {
     const tileTokens = {};
     players.forEach(p => {
@@ -1869,7 +1906,7 @@ function updateAllTokenPositions(initial = false) {
 
         const arr = tileTokens[p.pos] || [];
         const idx = arr.indexOf(p.id);
-        const base = tileCenter(p.pos);
+        const base = tokenBasePosition(p.pos, p.inJail);
 
         const spread = 8;
         const angle = (idx / Math.max(arr.length, 1)) * Math.PI * 2;
