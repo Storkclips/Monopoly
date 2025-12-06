@@ -44,12 +44,54 @@
         color: #222;
         font-family: "Georgia", "Times New Roman", serif;
         border-color: #111;
+        width: min(92vw, calc(var(--board-size) + 140px));
+        max-width: 760px;
+        min-width: min(360px, 92vw);
     }
 
     #endGamePopup h2 {
         font-family: "Georgia", "Times New Roman", serif;
         font-weight: 700;
         margin-bottom: 6px;
+    }
+
+    #wealthChartWrap {
+        margin-top: 12px;
+        background: #fffbed;
+        border: 1px solid #d8c48c;
+        border-radius: 12px;
+        padding: 10px 12px 14px;
+        box-shadow: inset 0 1px 0 #fffff8;
+    }
+
+    #wealthChartWrap canvas {
+        width: 100%;
+        height: 230px;
+        max-height: calc(var(--board-size) * 0.35);
+        min-height: 180px;
+        border-radius: 10px;
+        background: linear-gradient(180deg, #fff, #f5edd6);
+    }
+
+    .chart-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 8px;
+        font-size: 0.85rem;
+    }
+
+    .chart-legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .chart-legend .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
     }
 
     .side-panel {
@@ -1384,6 +1426,31 @@ players.forEach(p => {
     };
 });
 
+let wealthHistory = players.map(() => []);
+let turnCounter = 0;
+
+function sizeEndGamePopupLayout() {
+    const card = document.querySelector("#endGamePopup .overlay-card");
+    const chartCanvas = document.getElementById("endGameChart");
+    const chartWrap = document.getElementById("wealthChartWrap");
+
+    if (card) {
+        const rootStyles = getComputedStyle(document.documentElement);
+        const boardSizePx = parseFloat(rootStyles.getPropertyValue("--board-size")) || 720;
+        const responsiveMax = Math.min(window.innerWidth - 24, boardSizePx + 140);
+        card.style.maxWidth = `${Math.min(760, Math.max(360, responsiveMax))}px`;
+    }
+
+    if (chartCanvas && chartWrap) {
+        const boardSizePx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--board-size")) || 720;
+        const targetHeight = Math.min(Math.max(180, boardSizePx * 0.32), chartCanvas.scrollHeight || 320);
+        const wrapWidth = chartWrap.clientWidth || chartCanvas.width;
+        chartCanvas.style.height = `${targetHeight}px`;
+        chartCanvas.width = wrapWidth;
+        chartCanvas.height = targetHeight;
+    }
+}
+
 /* Simulated card inventory per player */
 const playerCards = players.map(() => ({
     chance: 0,
@@ -1406,11 +1473,15 @@ function showEndGamePopup(winner) {
     let html = `<strong>Winner:</strong> ${winner ? winner.name : "None"}<br><br>`;
 
     players.forEach(p => {
+        const propertyWealth = p.properties.reduce((sum, idx) => sum + computePropertyWealth(idx), 0);
+        const totalWealth = computeTotalWealth(p);
         html += `
         <div style="margin-bottom:10px;">
             <strong style="color:${playerColors[p.id]}">${p.name}</strong><br>
-            Money: $${p.money}<br>
-            Properties: ${p.properties.length}<br>
+            Total Wealth (cash + property): $${totalWealth}<br>
+            Cash: $${p.money}<br>
+            Property Wealth: $${propertyWealth}<br>
+            Properties Owned: ${p.properties.length}<br>
             Houses Built: ${p.stats.housesBuilt}<br>
             Hotels Built: ${p.stats.hotelsBuilt}<br>
             Rent Paid: $${p.stats.rentPaid}<br>
@@ -1421,6 +1492,10 @@ function showEndGamePopup(winner) {
 
     statsDiv.innerHTML = html;
     popup.style.display = "flex";
+
+    sizeEndGamePopupLayout();
+    
+    renderWealthChart();
 
     // Countdown & Auto-Restart
     let t = 10;
@@ -1458,6 +1533,170 @@ board.forEach((tile, i) => {
     if (tile.type === "property" && typeof tile.color === "number") {
         if (!colorGroups[tile.color]) colorGroups[tile.color] = [];
         colorGroups[tile.color].push(i);
+    }
+});
+
+function computePropertyWealth(tileIndex) {
+    const tile = board[tileIndex];
+    if (!tile) return 0;
+
+    let value = tile.price || 0;
+    if (tile.mortgaged) value *= 0.5; // mortgage trims available equity
+
+    const dev = developments[tileIndex];
+    if (dev) {
+        const houseCost = tile.houseCost || 0;
+        value += dev.houses * houseCost;
+        if (dev.hotel) value += houseCost * 5; // rough value of upgrading to a hotel
+    }
+
+    return value;
+}
+
+function computeTotalWealth(player) {
+    if (!player) return 0;
+    let wealth = player.money;
+
+    player.properties.forEach(idx => {
+        wealth += computePropertyWealth(idx);
+    });
+
+    return Math.round(wealth);
+}
+
+function recordWealthSnapshot(label = "") {
+    wealthHistory.forEach((arr, idx) => {
+        const player = players[idx];
+        arr.push({ turn: turnCounter, wealth: computeTotalWealth(player), label });
+    });
+    turnCounter++;
+}
+
+function renderWealthChart() {
+    sizeEndGamePopupLayout();
+    const canvas = document.getElementById("endGameChart");
+    const legend = document.getElementById("wealthLegend");
+    if (!canvas || !legend) return;
+
+    // Sync canvas pixels to layout size for crisp lines
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+
+    const ctx = canvas.getContext("2d");
+    const padding = 44;
+    const width = canvas.width;
+    const height = canvas.height;
+
+    const steps = Math.max(1, ...wealthHistory.map(arr => arr.length));
+    const flat = wealthHistory.flat();
+    const maxWealth = Math.max(1, ...flat.map(p => p.wealth || 0));
+    const chartWidth = Math.max(10, width - padding * 1.4);
+    const chartHeight = Math.max(10, height - padding * 1.6);
+    const xStep = steps > 1 ? chartWidth / (steps - 1) : 0;
+
+    legend.innerHTML = players
+        .map((p, idx) => `<span><span class="dot" style="background:${playerColors[idx]}"></span>${p.name}</span>`)
+        .join("");
+
+    const seriesPoints = wealthHistory.map(arr =>
+        arr.map((entry, i) => {
+            const x = padding + i * xStep;
+            const y = (height - padding) - (entry.wealth / maxWealth) * chartHeight;
+            return { x, y, wealth: entry.wealth };
+        })
+    );
+
+    const duration = 1400;
+    const start = performance.now();
+
+    function drawFrame(now) {
+        const progress = Math.min(1, (now - start) / duration);
+        ctx.clearRect(0, 0, width, height);
+
+        // Axes
+        ctx.strokeStyle = "#c7b68a";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding * 0.5);
+        ctx.lineTo(padding, height - padding);
+        ctx.lineTo(width - padding * 0.35, height - padding);
+        ctx.stroke();
+
+        // Grid + labels
+        const gridLines = 4;
+        ctx.font = "12px 'Segoe UI', sans-serif";
+        ctx.fillStyle = "#6d6040";
+        for (let i = 0; i <= gridLines; i++) {
+            const ratio = i / gridLines;
+            const y = (height - padding) - chartHeight * ratio;
+            ctx.strokeStyle = "rgba(0,0,0,0.07)";
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(width - padding * 0.35, y);
+            ctx.stroke();
+            const labelVal = Math.round(maxWealth * ratio);
+            ctx.fillText(`$${labelVal}`, 10, y + 4);
+        }
+
+        seriesPoints.forEach((points, idx) => {
+            if (!points.length) return;
+
+            const totalSegments = Math.max(1, steps - 1);
+            const visibleSegments = totalSegments * progress;
+            const fullSegments = Math.floor(visibleSegments);
+            const partial = visibleSegments - fullSegments;
+
+            ctx.strokeStyle = playerColors[idx];
+            ctx.lineWidth = 2.4;
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+
+            for (let i = 1; i <= fullSegments && i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+
+            let markerX = points[Math.min(fullSegments, points.length - 1)].x;
+            let markerY = points[Math.min(fullSegments, points.length - 1)].y;
+
+            if (fullSegments + 1 < points.length) {
+                const prev = points[fullSegments];
+                const next = points[fullSegments + 1];
+                const x = prev.x + (next.x - prev.x) * partial;
+                const y = prev.y + (next.y - prev.y) * partial;
+                ctx.lineTo(x, y);
+                markerX = x;
+                markerY = y;
+            }
+
+            ctx.stroke();
+
+            // marker
+            ctx.fillStyle = "#fff";
+            ctx.strokeStyle = "#1e1a10";
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.arc(markerX, markerY, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // value label
+            const latestWealth = points[points.length - 1].wealth;
+            ctx.fillStyle = "#2f2716";
+            ctx.font = "11px 'Segoe UI', sans-serif";
+            ctx.fillText(`$${latestWealth}`, markerX + 6, markerY - 6);
+        });
+
+        if (progress < 1) requestAnimationFrame(drawFrame);
+    }
+
+    requestAnimationFrame(drawFrame);
+}
+
+window.addEventListener("resize", () => {
+    const popup = document.getElementById("endGamePopup");
+    if (popup && popup.style.display !== "none") {
+        sizeEndGamePopupLayout();
+        renderWealthChart();
     }
 });
 
@@ -4056,6 +4295,10 @@ async function mainLoop() {
     updatePoolHud();
     log("The game begins.");
 
+    wealthHistory = players.map(() => []);
+    turnCounter = 0;
+    recordWealthSnapshot("Game start");
+
     while (true) {
         if (forceEndGame) {
             const winner = getLeadingPlayer();
@@ -4078,6 +4321,7 @@ async function mainLoop() {
 
         const player = players[currentPlayerIndex];
         await takeTurn(player);
+        recordWealthSnapshot(`${player.name} turn`);
         currentPlayerIndex = nextPlayerIndex();
     }
 }
@@ -4311,9 +4555,18 @@ function restartGame() {
 
 <!-- End Game Stats Popup -->
 <div id="endGamePopup" class="overlay" style="z-index:3000; display:none;">
-    <div class="overlay-card" style="max-width:480px; text-align:left;">
+    <div class="overlay-card" style="text-align:left;">
         <h2>Game Over</h2>
         <div id="endGameStats" style="font-size:0.9rem; line-height:1.4; margin-top:10px;"></div>
+
+        <div id="wealthChartWrap">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                <div style="font-weight:700; color:#3e3623;">Wealth Journey</div>
+                <div style="font-size:0.8rem; color:#645739;">Includes cash, property value, and buildings</div>
+            </div>
+            <canvas id="endGameChart" width="520" height="230"></canvas>
+            <div id="wealthLegend" class="chart-legend" aria-label="Player wealth legend"></div>
+        </div>
 
         <div style="margin-top:15px; text-align:center; font-size:1rem;">
             Next game starts in <span id="restartCountdown">10</span>…
