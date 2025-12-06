@@ -1736,6 +1736,7 @@ function populateGMMoneyPlayerOptions() {
 /* ========== UTILS ========== */
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const LOG_MAX_ENTRIES = 400;
 
 function fastSleep(ms) {
     const adjusted = ms / gameSpeed;
@@ -1756,6 +1757,12 @@ function log(msg, opts = {}) {
     }
     entry.appendChild(document.createTextNode(msg));
     logScrollEl.appendChild(entry);
+
+    // Trim log entries to avoid unbounded DOM growth over long autoplay sessions.
+    while (logScrollEl.childNodes.length > LOG_MAX_ENTRIES) {
+        logScrollEl.removeChild(logScrollEl.firstChild);
+    }
+
     logScrollEl.scrollTop = logScrollEl.scrollHeight;
 }
 
