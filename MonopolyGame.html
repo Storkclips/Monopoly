@@ -2752,8 +2752,26 @@ function propertyValueFor(playerId, tileIndex) {
 
     let base = tile.price || (tile.rent || 10) * 20;
 
-    if (tile.type === "railroad") base = 200;
-    if (tile.type === "utility") base = 150;
+    if (tile.type === "railroad") {
+        const owned = board.reduce((count, t, idx) =>
+            count + (t.type === "railroad" && ownership[idx] === playerId ? 1 : 0), 0
+        );
+        const prospective = ownership[tileIndex] === playerId ? owned : owned + 1;
+        const synergy = 1 + 0.35 * Math.max(0, prospective - 1);
+        base = 200 * synergy;
+
+        // Owning the full set is a major income swing; add a small premium
+        if (prospective === 4) base += 150;
+    }
+
+    if (tile.type === "utility") {
+        const owned = board.reduce((count, t, idx) =>
+            count + (t.type === "utility" && ownership[idx] === playerId ? 1 : 0), 0
+        );
+        const prospective = ownership[tileIndex] === playerId ? owned : owned + 1;
+        const synergy = prospective >= 2 ? 1.6 : 1.0;
+        base = 150 * synergy;
+    }
 
     // Mortgaged properties are a discount opportunity but still valuable for completing sets.
     if (tile.mortgaged) base *= 0.65;
@@ -2781,13 +2799,35 @@ function generateTrade(offerer) {
     let aCash = 0;
     let bCash = 0;
 
-    function pickSome(arr) {
+    function pickSome(arr, { cautiousRailroads = false } = {}) {
         if (!arr.length) return [];
         const copy = arr.slice();
-        const count = Math.min(2, copy.length, 1 + Math.floor(Math.random() * 2));
+        const filtered = cautiousRailroads
+            ? copy.filter(idx => {
+                const t = board[idx];
+                if (t.type === "railroad") {
+                    const owned = board.reduce((c, tile, i) =>
+                        c + (tile.type === "railroad" && ownership[i] === offerer.id ? 1 : 0), 0
+                    );
+                    if (owned >= 2 && Math.random() < 0.8) return false;
+                }
+                if (t.type === "utility") {
+                    const owned = board.reduce((c, tile, i) =>
+                        c + (tile.type === "utility" && ownership[i] === offerer.id ? 1 : 0), 0
+                    );
+                    if (owned >= 2 && Math.random() < 0.7) return false;
+                }
+                return true;
+            })
+            : copy;
+
+        if (!filtered.length) return [];
+
+        const pool = filtered.slice();
+        const count = Math.min(2, pool.length, 1 + Math.floor(Math.random() * 2));
         const out = [];
-        for (let i = 0; i < count && copy.length; i++) {
-            out.push(copy.splice(Math.floor(Math.random() * copy.length), 1)[0]);
+        for (let i = 0; i < count && pool.length; i++) {
+            out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
         }
         return out;
     }
@@ -2804,7 +2844,7 @@ function generateTrade(offerer) {
         if (aCash <= 0) return null;
 
     } else if (mode < 0.35 && aPropsOwned.length && bPropsOwned.length) {
-        aProps.push(...pickSome(aPropsOwned));
+        aProps.push(...pickSome(aPropsOwned, { cautiousRailroads: true }));
         bProps.push(...pickSome(bPropsOwned));
 
     } else if (mode < 0.7 && bPropsOwned.length) {
@@ -2815,7 +2855,7 @@ function generateTrade(offerer) {
         if (aCash <= 0) return null;
 
     } else if (aPropsOwned.length) {
-        aProps.push(...pickSome(aPropsOwned));
+        aProps.push(...pickSome(aPropsOwned, { cautiousRailroads: true }));
 
         const val = aProps.reduce((s, i) => s + propertyValueFor(offerer.id, i), 0);
 
